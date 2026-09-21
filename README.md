@@ -48,7 +48,7 @@
 ## 技术栈
 
 - **TypeScript**（严格模式）
-- **Vite** + **React**（前端）
+- **Vite** + **原生 TypeScript**（前端，无框架）
 - **Tauri v2** + **Rust**（桌面打包，产出 `.msi` 和 `.exe` 安装包）
 - **vitest**（单元测试）
 
