@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="拾年回忆录编辑室：写作、时间线、成书与数据管理各自独立。" />
+    <meta name="theme-color" content="#faf8f5" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>拾年 · 回忆录编辑室</title>
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+      <header class="app-nav">
+        <div class="app-nav__brand"><strong>拾年</strong><span>回忆录编辑器</span></div>
+        <nav class="view-nav" aria-label="主导航">
+          <button class="view-nav__item is-active" type="button" data-view="writing">写作</button>
+          <button class="view-nav__item" type="button" data-view="timeline">时间线</button>
+          <button class="view-nav__item" type="button" data-view="book">成书</button>
+          <button class="view-nav__item" type="button" data-view="data">设置与数据</button>
+        </nav>
+      </header>
+
+      <section id="view-writing" class="app-view is-active" data-view-panel="writing">
+        <div class="writing-room">
+          <aside class="library-sidebar" aria-label="篇目目录">
+            <header class="sidebar-header">
+              <span class="sidebar-heading">目录</span>
+              <p id="library-summary" class="library-summary">0 篇</p>
+            </header>
+            <div class="sidebar-new">
+              <button id="manual-add-button" class="text-button text-button--strong" type="button">＋ 新的一篇</button>
+            </div>
+            <label class="sidebar-search">
+              <span class="sr-only">搜索篇目</span>
+              <input id="search-input" type="search" placeholder="搜索标题或正文" />
+              <span id="search-status" class="sidebar-search__status"></span>
+            </label>
+            <div class="sidebar-order" role="group" aria-label="排序方式">
+              <button class="sidebar-order__button is-active" type="button" data-order-mode="auto">按时间</button>
+              <button class="sidebar-order__button" type="button" data-order-mode="manual">手动顺序</button>
+            </div>
+            <div id="entry-list" class="sidebar-entry-list"></div>
+          </aside>
+          <main id="editor-surface" class="editor-surface" aria-label="写作区"></main>
+        </div>
+      </section>
+
+      <section id="view-timeline" class="app-view" data-view-panel="timeline" hidden>
+        <div class="view-heading"><div><p class="section-kicker">TIMELINE</p><h1>时间线</h1></div><p>全篇总览、顺序调整和批量整理。</p></div>
+        <div class="timeline-toolbar">
+          <label class="inline-field"><span>排序</span><select id="timeline-order-mode"><option value="auto">按时间</option><option value="manual">手动顺序</option></select></label>
+          <label class="inline-field"><span>分组显示</span><select id="timeline-group-mode"><option value="year">按年份</option><option value="stage">按学段</option><option value="group">按成书分组</option><option value="none">不分组</option></select></label>
+          <button id="timeline-select-all" class="text-button" type="button">全选</button>
+          <span id="timeline-selected-count" class="toolbar-count">未选择</span>
+          <input id="timeline-batch-time" class="batch-time" type="text" placeholder="批量时间，例如 2018年秋" />
+          <button id="timeline-batch-time-button" class="secondary-button" type="button">批量改时间</button>
+          <button id="timeline-batch-delete-button" class="text-button" type="button">批量删除</button>
+        </div>
+        <div id="timeline-list" class="timeline-list"></div>
+      </section>
+
+      <section id="view-book" class="app-view" data-view-panel="book" hidden>
+        <div class="view-heading"><div><p class="section-kicker">COMPOSE</p><h1>成书</h1></div><p>选择篇目、确定顺序、设置章节与序后记。</p></div>
+        <div class="book-workspace">
+          <section class="book-selection-panel">
+            <div class="panel-title"><h2>1. 选择篇目</h2><span id="selected-count">已选 0 篇</span></div>
+            <div class="selection-actions"><button id="select-all" class="text-button" type="button">全选</button><button id="clear-selection" class="text-button" type="button">清空</button></div>
+            <div id="book-selection-list" class="book-selection-list"></div>
+          </section>
+          <section class="book-form-panel">
+            <div class="panel-title"><h2>2. 设置书籍</h2></div>
+            <div class="form-grid">
+              <label class="field"><span class="field__label">书名</span><input id="book-title" type="text" maxlength="60" /></label>
+              <label class="field"><span class="field__label">副标题</span><input id="book-subtitle" type="text" maxlength="80" /></label>
+            </div>
+            <label class="field"><span class="field__label">作者</span><input id="book-author" type="text" maxlength="40" placeholder="可留空" /></label>
+            <label class="field"><span class="field__label">章节分组</span><select id="chapter-mode"><option value="year">按自然年份</option><option value="academic-year">按中学学年</option><option value="manual-group">按我的分组</option></select></label>
+            <label class="field"><span class="field__label">序</span><textarea id="book-preface" rows="5" placeholder="写在正文之前"></textarea></label>
+            <label class="field"><span class="field__label">后记</span><textarea id="book-afterword" rows="5" placeholder="写在正文之后"></textarea></label>
+            <div class="book-preview-actions"><button id="people-index-button" class="text-button" type="button">人物索引</button><button id="preview-book-button" class="secondary-button" type="button">3. 生成成书预览</button></div>
+            <p id="book-status" class="form-status" role="status" aria-live="polite"></p>
+          </section>
+        </div>
+      </section>
+
+      <section id="view-data" class="app-view" data-view-panel="data" hidden>
+        <div class="view-heading"><div><p class="section-kicker">DATA</p><h1>设置与数据</h1></div><p>导入、备份、导出与人物索引。</p></div>
+        <div class="data-grid">
+          <section class="data-section data-section--wide">
+            <h2>搜索篇目</h2>
+            <input id="data-search-input" type="search" placeholder="搜索标题、正文、时间或分组" />
+            <div id="data-search-results" class="data-search-results"></div>
+          </section>
+          <section class="data-section">
+            <h2>导入文档</h2>
+            <p>支持 TXT、Markdown、HTML、DOCX 和带文本层的 PDF。</p>
+            <input id="file-input" type="file" accept=".txt,.md,.markdown,.html,.htm,.docx,.pdf" multiple hidden />
+            <input id="drop-file-input" type="file" accept=".txt,.md,.markdown,.html,.htm,.docx,.pdf" multiple hidden />
+            <div id="drop-zone" class="data-drop-zone"><span>将文档拖到此处</span><button id="drop-import-button" class="secondary-button" type="button">选择文件</button></div>
+            <button id="import-button" class="secondary-button" type="button">导入文档</button>
+          </section>
+          <section class="data-section">
+            <h2>全量导出</h2>
+            <p>导出全部篇目、分组、序和后记为 Markdown 与 metadata.json。</p>
+            <button id="export-data-button" class="secondary-button" type="button">导出全部数据 ZIP</button>
+          </section>
+          <section class="data-section">
+            <h2>自动备份</h2>
+            <p>连接本地文件夹，每次保存后同步 Markdown 备份。</p>
+            <button id="choose-backup-button" class="secondary-button" type="button">连接本地文件夹</button>
+            <button id="forget-backup-button" class="text-button is-hidden" type="button">关闭自动备份</button>
+            <p id="backup-status" class="backup-status">自动备份：未开启</p>
+          </section>
+          <section class="data-section">
+            <h2>人物</h2>
+            <p>修正姓名、合并称呼或忽略误识别。</p>
+            <button id="open-people-index-button" class="secondary-button" type="button">查看人物索引</button>
+          </section>
+          <section class="data-section data-section--wide">
+            <h2>关于本地数据</h2>
+            <p>文章保存在浏览器本地存储中；自动备份目录句柄保存在 IndexedDB。没有后端上传。</p>
+          </section>
+        </div>
+      </section>
+    </div>
+
+    <dialog id="import-dialog" class="modal modal--wide">
+      <div class="modal__header"><div><p class="section-kicker">IMPORT</p><h2>确认导入内容</h2></div><button class="icon-button" type="button" data-close-dialog="import-dialog" aria-label="关闭">×</button></div>
+      <p class="modal__intro">已有标题原样保留；没有标题的篇章才会自动拟题。标题、时间和分组可在导入前修改。</p>
+      <div id="import-list" class="import-list"></div>
+      <div class="modal__footer"><p id="import-status" class="form-status" role="status" aria-live="polite"></p><button id="confirm-import-button" class="secondary-button" type="button">加入时间线</button></div>
+    </dialog>
+
+    <dialog id="edit-dialog" class="modal">
+      <form id="edit-form">
+        <div class="modal__header"><div><p class="section-kicker">EDIT</p><h2>整理这一篇</h2></div><button class="icon-button" type="button" data-close-dialog="edit-dialog" aria-label="关闭">×</button></div>
+        <input name="id" type="hidden" />
+        <div class="form-grid form-grid--three"><label class="field"><span class="field__label">标题</span><input name="title" type="text" maxlength="80" required /></label><label class="field"><span class="field__label">时间</span><input name="timeText" type="text" maxlength="80" required /></label><label class="field"><span class="field__label">成书分组</span><input name="bookGroup" type="text" maxlength="30" list="group-options" placeholder="可留空" /></label></div>
+        <datalist id="group-options"></datalist>
+        <button id="regenerate-title-button" class="text-button text-button--left" type="button">按正文重新生成标题</button>
+        <div id="edit-time-preview" class="time-preview"></div>
+        <label class="field"><span class="field__label field__label--with-action">正文<button id="voice-input-button" class="voice-button" type="button" aria-pressed="false">语音输入</button></span><textarea name="body" rows="14" required></textarea></label>
+        <p id="voice-status" class="voice-status" aria-live="polite">语音输入使用浏览器中文识别。</p>
+        <div class="modal__footer"><p id="edit-status" class="form-status" role="status" aria-live="polite"></p><button class="secondary-button" type="submit">保存修改</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="people-dialog" class="modal modal--wide">
+      <div class="modal__header"><div><p class="section-kicker">INDEX</p><h2>人物索引</h2></div><button class="icon-button" type="button" data-close-dialog="people-dialog" aria-label="关闭">×</button></div>
+      <p class="modal__intro">点击人名查看出现篇目；可修改显示名、忽略误识别，或手动补充。</p>
+      <div id="people-list" class="people-list"></div>
+      <div class="people-add-row"><input id="extra-person-input" type="text" maxlength="20" placeholder="手动补充人名" /><button id="add-extra-person-button" class="secondary-button" type="button">加入索引</button></div>
+      <div class="modal__footer"><button class="secondary-button" type="button" data-close-dialog="people-dialog">完成</button></div>
+    </dialog>
+
+    <dialog id="book-dialog" class="book-modal">
+      <div class="book-modal__toolbar"><div><p class="section-kicker">BOOK</p><h2 id="book-preview-title">成书预览</h2></div><div class="book-modal__actions"><button id="download-book-button" class="secondary-button" type="button">HTML</button><button id="download-epub-button" class="secondary-button" type="button">EPUB</button><button id="print-book-button" class="secondary-button" type="button">打印 / PDF</button><button class="icon-button" type="button" data-close-dialog="book-dialog" aria-label="关闭">×</button></div></div>
+      <iframe id="book-frame" class="book-frame" title="成书预览"></iframe>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
