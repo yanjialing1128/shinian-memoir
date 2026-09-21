@@ -21,6 +21,16 @@
 
 ---
 
+## 界面
+
+![写作界面](docs/screenshot-writing.png)
+
+![成书预览](docs/screenshot-book.png)
+
+![设置](docs/screenshot-settings.png)
+
+---
+
 ## 核心功能
 
 - **模糊时间解析** — 支持六类时间精度：精确日期、月份、季节、学期、年份、模糊描述
