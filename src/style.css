@@ -310,9 +310,18 @@ mark { padding: 0; color: var(--ink); background: #eee1cb; }
 .timeline-group { margin-top: 28px; }
 .timeline-group h2 { margin: 0 0 8px; color: var(--muted); font-family: var(--sans); font-size: 11px; font-weight: 500; letter-spacing: .08em; }
 .timeline-group__list { border-top: 1px solid var(--line); }
-.timeline-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto; gap: 14px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
-.timeline-row.is-dragging { opacity: .4; }
-.timeline-row.is-drop-target { border-top: 2px solid var(--wood); }
+.timeline-row { position: relative; display: grid; grid-template-columns: 22px 22px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); transition: background-color 150ms ease, opacity 150ms ease; }
+.timeline-row.is-manual:hover { background: var(--hover); }
+.timeline-row.is-dragging { opacity: .38; }
+.timeline-row.is-drop-before::before,
+.timeline-row.is-drop-after::after { position: absolute; right: 0; left: 0; height: 2px; background: var(--wood); content: ""; }
+.timeline-row.is-drop-before::before { top: -1px; }
+.timeline-row.is-drop-after::after { bottom: -1px; }
+.timeline-drag-handle { display: grid; width: 22px; height: 28px; place-items: center; padding: 0; border: 0; color: #b1aaa1; background: transparent; cursor: grab; touch-action: none; }
+.timeline-drag-handle:hover { color: var(--wood); background: rgba(139, 111, 71, .08); }
+.timeline-drag-handle:active { cursor: grabbing; }
+.timeline-drag-handle svg { display: block; fill: currentColor; }
+.timeline-row:not(.is-manual) .timeline-drag-handle { visibility: hidden; pointer-events: none; }
 .timeline-row__main { display: grid; gap: 3px; }
 .timeline-row__title { padding: 0; border: 0; color: var(--ink); background: transparent; font-family: var(--serif); font-size: 15px; font-weight: 400; text-align: left; }
 .timeline-row__title:hover { color: var(--wood); }
@@ -361,9 +370,10 @@ mark { padding: 0; color: var(--ink); background: #eee1cb; }
   .view-heading, .timeline-toolbar, .timeline-list, .book-workspace, .data-grid { padding-right: 24px; padding-left: 24px; }
   .book-workspace, .data-grid { grid-template-columns: 1fr; }
   .data-section--wide { grid-column: 1; }
-  .timeline-row { grid-template-columns: 20px minmax(0, 1fr) auto; }
-  .timeline-row .book-check { grid-column: 2; }
-  .timeline-row__actions { grid-column: 3; }
+  .timeline-row { grid-template-columns: 22px 22px minmax(0, 1fr) auto; }
+  .timeline-row__main { grid-column: 3; }
+  .timeline-row .book-check { grid-column: 4; grid-row: 1; }
+  .timeline-row__actions { grid-column: 3 / 5; grid-row: 2; }
 }.data-search-results { display: grid; gap: 0; margin-top: 12px; border-top: 1px solid var(--line); }
 .data-search-hint { color: var(--muted); font-size: 12px; }
 .data-search-result { display: grid; gap: 3px; padding: 10px 0; border: 0; border-bottom: 1px solid var(--line); color: var(--ink); background: transparent; text-align: left; }

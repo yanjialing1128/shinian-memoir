@@ -446,12 +446,36 @@ function timelineGroupFor(memory: MemoryEntry): { readonly key: string; readonly
   };
 }
 
+function createTimelineDragHandle(enabled: boolean): HTMLButtonElement {
+  const handle = document.createElement('button');
+  handle.type = 'button';
+  handle.className = 'timeline-drag-handle';
+  handle.draggable = enabled;
+  handle.disabled = !enabled;
+  handle.title = enabled ? '拖拽调整顺序' : '切换到手动顺序后可拖拽';
+  handle.setAttribute('aria-label', handle.title);
+  handle.innerHTML = `
+    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+      <circle cx="5" cy="3" r="1.2"></circle>
+      <circle cx="11" cy="3" r="1.2"></circle>
+      <circle cx="5" cy="8" r="1.2"></circle>
+      <circle cx="11" cy="8" r="1.2"></circle>
+      <circle cx="5" cy="13" r="1.2"></circle>
+      <circle cx="11" cy="13" r="1.2"></circle>
+    </svg>
+  `;
+  return handle;
+}
+
 function createTimelineRow(memory: MemoryEntry): HTMLElement {
   const parsed = parseTime(memory.timeText, PARSE_OPTIONS);
   const row = document.createElement('article');
-  row.className = 'timeline-row';
+  const manualMode = library.orderMode === 'manual';
+  row.className = manualMode ? 'timeline-row is-manual' : 'timeline-row';
   row.dataset.id = memory.id;
-  row.draggable = true;
+  row.draggable = false;
+
+  const dragHandle = createTimelineDragHandle(manualMode);
 
   const selectLabel = document.createElement('label');
   selectLabel.className = 'timeline-select';
@@ -495,7 +519,7 @@ function createTimelineRow(memory: MemoryEntry): HTMLElement {
   remove.textContent = '删除';
   actions.append(edit, remove);
 
-  row.append(selectLabel, main, includeLabel, actions);
+  row.append(dragHandle, selectLabel, main, includeLabel, actions);
   return row;
 }
 
@@ -801,7 +825,11 @@ function updateMemoryById(id: string, changes: Partial<Omit<MemoryEntry, 'id' | 
   if (persist({ ...library, memories })) renderWorkspace();
 }
 
-function reorderMemory(sourceId: string, targetId: string): void {
+function reorderMemory(
+  sourceId: string,
+  targetId: string,
+  placement: 'before' | 'after' = 'before',
+): void {
   if (searchInput.value.trim()) {
     showToast('请先清空搜索，再拖拽调整顺序。');
     return;
@@ -812,11 +840,14 @@ function reorderMemory(sourceId: string, targetId: string): void {
   if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) return;
   const [source] = ordered.splice(sourceIndex, 1);
   if (!source) return;
-  ordered.splice(targetIndex, 0, source);
+  const remainingTargetIndex = ordered.findIndex((memory) => memory.id === targetId);
+  if (remainingTargetIndex === -1) return;
+  const insertionIndex = placement === 'after' ? remainingTargetIndex + 1 : remainingTargetIndex;
+  ordered.splice(insertionIndex, 0, source);
   const memories = withNormalizedManualOrder(ordered);
   if (persist({ ...library, orderMode: 'manual', memories })) {
     renderWorkspace();
-    showToast('已改为手动顺序。');
+    showToast('手动顺序已保存。');
   }
 }
 
@@ -1318,29 +1349,50 @@ timelineList.addEventListener('change', (event) => {
   }
 });
 timelineList.addEventListener('dragstart', (event) => {
+  if (library.orderMode !== 'manual') return;
   const target = event.target;
-  if (!(target instanceof Element)) return;
+  if (!(target instanceof Element) || !target.closest('.timeline-drag-handle')) return;
   const row = target.closest<HTMLElement>('.timeline-row');
   if (!row?.dataset.id) return;
   draggedMemoryId = row.dataset.id;
   row.classList.add('is-dragging');
+  event.dataTransfer?.setData('text/plain', draggedMemoryId);
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
 });
+
 timelineList.addEventListener('dragover', (event) => {
-  event.preventDefault();
-  const target = event.target;
-  if (target instanceof Element) target.closest<HTMLElement>('.timeline-row')?.classList.add('is-drop-target');
-});
-timelineList.addEventListener('drop', (event) => {
+  if (library.orderMode !== 'manual' || !draggedMemoryId) return;
   event.preventDefault();
   const target = event.target;
   if (!(target instanceof Element)) return;
-  const targetId = target.closest<HTMLElement>('.timeline-row')?.dataset.id;
-  const sourceId = draggedMemoryId ?? event.dataTransfer?.getData('text/plain');
-  if (sourceId && targetId) reorderMemory(sourceId, targetId);
+  const row = target.closest<HTMLElement>('.timeline-row');
+  if (!row || row.dataset.id === draggedMemoryId) return;
+  timelineList.querySelectorAll('.is-drop-before, .is-drop-after').forEach((element) => {
+    element.classList.remove('is-drop-before', 'is-drop-after');
+  });
+  const rect = row.getBoundingClientRect();
+  row.classList.add(event.clientY < rect.top + rect.height / 2 ? 'is-drop-before' : 'is-drop-after');
 });
+
+timelineList.addEventListener('drop', (event) => {
+  if (library.orderMode !== 'manual') return;
+  event.preventDefault();
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const row = target.closest<HTMLElement>('.timeline-row');
+  const targetId = row?.dataset.id;
+  const sourceId = draggedMemoryId ?? event.dataTransfer?.getData('text/plain');
+  if (!row || !targetId || !sourceId) return;
+  const rect = row.getBoundingClientRect();
+  const placement = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+  reorderMemory(sourceId, targetId, placement);
+});
+
 timelineList.addEventListener('dragend', () => {
   draggedMemoryId = null;
-  timelineList.querySelectorAll('.is-dragging, .is-drop-target').forEach((element) => element.classList.remove('is-dragging', 'is-drop-target'));
+  timelineList.querySelectorAll('.is-dragging, .is-drop-before, .is-drop-after').forEach((element) => {
+    element.classList.remove('is-dragging', 'is-drop-before', 'is-drop-after');
+  });
 });
 
 bookSelectionList.addEventListener('change', (event) => {
