@@ -48,13 +48,18 @@
       <section id="view-timeline" class="app-view" data-view-panel="timeline" hidden>
         <div class="view-heading"><div><p class="section-kicker">TIMELINE</p><h1>时间线</h1></div><p>全篇总览、顺序调整和批量整理。</p></div>
         <div class="timeline-toolbar">
-          <label class="inline-field"><span>排序</span><select id="timeline-order-mode"><option value="auto">按时间</option><option value="manual">手动顺序</option></select></label>
-          <label class="inline-field"><span>分组显示</span><select id="timeline-group-mode"><option value="year">按年份</option><option value="stage">按学段</option><option value="group">按成书分组</option><option value="none">不分组</option></select></label>
-          <button id="timeline-select-all" class="text-button" type="button">全选</button>
-          <span id="timeline-selected-count" class="toolbar-count">未选择</span>
-          <input id="timeline-batch-time" class="batch-time" type="text" placeholder="批量时间，例如 2018年秋" />
-          <button id="timeline-batch-time-button" class="secondary-button" type="button">批量改时间</button>
-          <button id="timeline-batch-delete-button" class="text-button" type="button">批量删除</button>
+          <div class="timeline-toolbar__base">
+            <label class="inline-field"><span>排序</span><select id="timeline-order-mode"><option value="auto">按时间</option><option value="manual">手动顺序</option></select></label>
+            <label class="inline-field"><span>分组显示</span><select id="timeline-group-mode"><option value="year">按年份</option><option value="stage">按学段</option><option value="group">按成书分组</option><option value="none">不分组</option></select></label>
+          </div>
+          <div id="timeline-batch-actions" class="timeline-batch-actions" hidden>
+            <span id="timeline-selected-count" class="toolbar-count">已选 0 篇</span>
+            <button id="timeline-select-all" class="text-button" type="button">全选</button>
+            <input id="timeline-batch-time" class="batch-time" type="text" placeholder="批量时间，例如 2018年秋" />
+            <button id="timeline-batch-time-button" class="secondary-button" type="button">批量改时间</button>
+            <button id="timeline-batch-delete-button" class="text-button" type="button">批量删除</button>
+            <button id="timeline-clear-selection" class="text-button" type="button">取消选择</button>
+          </div>
         </div>
         <div id="timeline-list" class="timeline-list"></div>
       </section>

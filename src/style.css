@@ -313,6 +313,8 @@ mark { padding: 0; color: var(--ink); background: #eee1cb; }
 .timeline-row { position: relative; display: grid; grid-template-columns: 22px 22px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); transition: background-color 150ms ease, opacity 150ms ease; }
 .timeline-row.is-manual:hover { background: var(--hover); }
 .timeline-row.is-dragging { opacity: .38; }
+.timeline-row.is-pointer-dragging { z-index: 20; opacity: .82; background: #fffdf8; cursor: grabbing; transition: none; }
+body.is-reordering-timeline { cursor: grabbing; user-select: none; }
 .timeline-row.is-drop-before::before,
 .timeline-row.is-drop-after::after { position: absolute; right: 0; left: 0; height: 2px; background: var(--wood); content: ""; }
 .timeline-row.is-drop-before::before { top: -1px; }
@@ -380,3 +382,27 @@ mark { padding: 0; color: var(--ink); background: #eee1cb; }
 .data-search-result:hover { background: var(--hover); }
 .data-search-result span { font-family: var(--serif); font-size: 15px; }
 .data-search-result small { color: var(--muted); font-size: 12px; }
+/* Timeline contextual toolbar and bookmark controls */
+.timeline-toolbar { justify-content: space-between; }
+.timeline-toolbar__base,
+.timeline-batch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.timeline-batch-actions { justify-content: flex-end; animation: fade-in 150ms ease both; }
+.timeline-batch-actions[hidden] { display: none; }
+.timeline-row__meta { display: flex; justify-content: space-between; gap: 16px; }
+.timeline-row__precision { color: #a29a90; }
+.timeline-row__actions { visibility: hidden; opacity: 0; pointer-events: none; }
+.timeline-row:hover .timeline-row__actions,
+.timeline-row:focus-within .timeline-row__actions { visibility: visible; opacity: 1; pointer-events: auto; }
+.timeline-bookmark { display: grid; width: 28px; height: 28px; place-items: center; padding: 0; border: 0; color: #9d968c; background: transparent; cursor: pointer; }
+.timeline-bookmark:hover { color: var(--wood); background: var(--hover); }
+.timeline-bookmark.is-active { color: var(--wood); }
+.timeline-bookmark svg { display: block; }
+@media (hover: none) {
+  .timeline-row__actions { visibility: visible; opacity: 1; pointer-events: auto; }
+}
+@media (max-width: 900px) {
+  .timeline-toolbar { align-items: flex-start; flex-direction: column; }
+  .timeline-batch-actions { width: 100%; justify-content: flex-start; }
+  .timeline-row { grid-template-columns: 22px 22px minmax(0, 1fr) 28px auto; }
+  .timeline-row__actions { grid-column: 3 / 6; grid-row: 2; }
+}.timeline-row__precision::before { color: #c4bcb2; content: "· "; }

@@ -18,19 +18,21 @@ import {
 } from './storage/directory-backup';
 import { createLibraryExportBlob } from './storage/export-data';
 import {
+  createEmptyLibraryState,
   createMemory,
-  loadLibraryState,
-  saveLibraryState,
   updateMemory,
   withNormalizedManualOrder,
   type LibraryState,
   type MemoryEntry,
   type PeopleCorrections,
-  type StorageLike,
 } from './storage/memory-store';
-import { parseTime, sortMemories } from './time';
+import {
+  createLibraryRepository,
+  type LibraryRepository,
+} from './storage/library-repository';
+import { parseTime, sortMemories, type TimePrecision } from './time';
 
-const PARSE_OPTIONS = { middleSchoolStartYear: 2003 };
+let parseOptions = { middleSchoolStartYear: 2003 };
 
 function requireElement<T extends Element>(selector: string): T {
   const element = document.querySelector<T>(selector);
@@ -40,11 +42,22 @@ function requireElement<T extends Element>(selector: string): T {
   return element;
 }
 
-const storage: StorageLike = window.localStorage;
-let library: LibraryState = loadLibraryState(storage);
+let library: LibraryState = createEmptyLibraryState();
+let repository: LibraryRepository | null = null;
 let importDrafts: readonly ImportedDocumentDraft[] = [];
 let currentBook: BookDocument | null = null;
 let draggedMemoryId: string | null = null;
+
+interface TimelinePointerDragState {
+  readonly sourceId: string;
+  readonly pointerId: number;
+  readonly startY: number;
+  readonly row: HTMLElement;
+  targetId: string | null;
+  placement: 'before' | 'after';
+}
+
+let timelinePointerDrag: TimelinePointerDragState | null = null;
 let backupDirectory: FileSystemDirectoryHandle | null = null;
 let backupTimer: number | null = null;
 let backupRunning = false;
@@ -116,6 +129,8 @@ const timelineBatchTime = requireElement<HTMLInputElement>('#timeline-batch-time
 const timelineBatchTimeButton = requireElement<HTMLButtonElement>('#timeline-batch-time-button');
 const timelineBatchDeleteButton = requireElement<HTMLButtonElement>('#timeline-batch-delete-button');
 const timelineSelectAllButton = requireElement<HTMLButtonElement>('#timeline-select-all');
+const timelineBatchActions = requireElement<HTMLDivElement>('#timeline-batch-actions');
+const timelineClearSelectionButton = requireElement<HTMLButtonElement>('#timeline-clear-selection');
 const bookSelectionList = requireElement<HTMLDivElement>('#book-selection-list');
 const dataSearchInput = requireElement<HTMLInputElement>('#data-search-input');
 const dataSearchResults = requireElement<HTMLDivElement>('#data-search-results');
@@ -144,7 +159,7 @@ function updateBackupStatus(message: string, tone: 'normal' | 'error' | 'success
 
 function getTimelineMemories(): readonly MemoryEntry[] {
   if (library.orderMode === 'auto') {
-    return sortMemories(library.memories, PARSE_OPTIONS).map((entry) => entry.item);
+    return sortMemories(library.memories, parseOptions).map((entry) => entry.item);
   }
 
   return [...library.memories].sort((left, right) => {
@@ -182,13 +197,46 @@ async function runDirectoryBackup(): Promise<void> {
 }
 
 function persist(nextLibrary: LibraryState): boolean {
-  if (!saveLibraryState(storage, nextLibrary)) {
-    showToast('浏览器没有允许本地存储，这次修改没有保存。', 'error');
+  if (!repository) {
+    showToast('本地数据仍在初始化，请稍后再试。', 'error');
     return false;
   }
   library = nextLibrary;
-  scheduleDirectoryBackup();
+  void repository
+    .save(nextLibrary)
+    .then(() => scheduleDirectoryBackup())
+    .catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : '写入本地数据失败。';
+      showToast(message, 'error');
+    });
   return true;
+}
+
+async function initializeStorage(): Promise<void> {
+  try {
+    repository = await createLibraryRepository();
+    const loaded = await repository.load();
+    library = loaded.state;
+    parseOptions = {
+      middleSchoolStartYear: loaded.middleSchoolStartYear,
+    };
+    selectedMemoryId = library.memories[0]?.id ?? null;
+    bookTitleInput.value = library.book.title;
+    bookSubtitleInput.value = library.book.subtitle;
+    bookAuthorInput.value = library.book.author;
+    bookPrefaceInput.value = library.book.preface;
+    bookAfterwordInput.value = library.book.afterword;
+    chapterModeSelect.value = library.book.chapterMode;
+    renderWorkspace();
+    if (loaded.migratedCount > 0) {
+      showToast(`已迁移 ${loaded.migratedCount} 篇到本地文件`, 'success');
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '无法初始化本地数据。';
+    showToast(message, 'error');
+    renderWorkspace();
+  }
+  await initializeBackup();
 }
 
 async function initializeBackup(): Promise<void> {
@@ -276,7 +324,7 @@ function renderTimePreview(container: HTMLElement, rawText: string): void {
     container.append(dot, '输入时间后显示识别结果。');
     return;
   }
-  const parsed = parseTime(rawText, PARSE_OPTIONS);
+  const parsed = parseTime(rawText, parseOptions);
   const badge = document.createElement('span');
   badge.className = 'time-preview__badge';
   if (!parsed.resolved) {
@@ -306,7 +354,7 @@ function createActionButton(label: string, action: string, extraClass = ''): HTM
 }
 
 function createEntryCard(memory: MemoryEntry, position: number, manualMode: boolean): HTMLElement {
-  const parsed = parseTime(memory.timeText, PARSE_OPTIONS);
+  const parsed = parseTime(memory.timeText, parseOptions);
   const searchTerm = searchInput.value.trim();
   const card = document.createElement('article');
   card.className = 'entry-card';
@@ -429,7 +477,7 @@ function timelineGroupFor(memory: MemoryEntry): { readonly key: string; readonly
     return { key: `group-${title}`, title };
   }
 
-  const parsed = parseTime(memory.timeText, PARSE_OPTIONS);
+  const parsed = parseTime(memory.timeText, parseOptions);
   if (!parsed.resolved || !parsed.range) return { key: 'unknown', title: '时间待考' };
   const date = new Date(parsed.range.midDay * 86_400_000);
   const year = date.getUTCFullYear();
@@ -437,7 +485,7 @@ function timelineGroupFor(memory: MemoryEntry): { readonly key: string; readonly
   if (mode === 'year') return { key: `year-${year}`, title: `${year}年` };
 
   const startYear = month >= 8 ? year : year - 1;
-  const gradeIndex = startYear - PARSE_OPTIONS.middleSchoolStartYear;
+  const gradeIndex = startYear - parseOptions.middleSchoolStartYear;
   const grades = ['初一', '初二', '初三', '高一', '高二', '高三'];
   const grade = grades[gradeIndex];
   return {
@@ -446,11 +494,31 @@ function timelineGroupFor(memory: MemoryEntry): { readonly key: string; readonly
   };
 }
 
+function timelinePrecisionLabel(precision: TimePrecision): string {
+  switch (precision) {
+    case 'day':
+      return '精确日期';
+    case 'month':
+      return '月份';
+    case 'season':
+      return '季节';
+    case 'semester':
+      return '学期';
+    case 'academic-year':
+      return '学年';
+    case 'year':
+      return '年份';
+    case 'fuzzy':
+      return '模糊时间';
+    case 'unknown':
+      return '待识别';
+  }
+}
 function createTimelineDragHandle(enabled: boolean): HTMLButtonElement {
   const handle = document.createElement('button');
   handle.type = 'button';
   handle.className = 'timeline-drag-handle';
-  handle.draggable = enabled;
+  handle.draggable = false;
   handle.disabled = !enabled;
   handle.title = enabled ? '拖拽调整顺序' : '切换到手动顺序后可拖拽';
   handle.setAttribute('aria-label', handle.title);
@@ -468,7 +536,7 @@ function createTimelineDragHandle(enabled: boolean): HTMLButtonElement {
 }
 
 function createTimelineRow(memory: MemoryEntry): HTMLElement {
-  const parsed = parseTime(memory.timeText, PARSE_OPTIONS);
+  const parsed = parseTime(memory.timeText, parseOptions);
   const row = document.createElement('article');
   const manualMode = library.orderMode === 'manual';
   row.className = manualMode ? 'timeline-row is-manual' : 'timeline-row';
@@ -492,19 +560,33 @@ function createTimelineRow(memory: MemoryEntry): HTMLElement {
   title.className = 'timeline-row__title';
   title.dataset.action = 'timeline-edit';
   title.textContent = memory.title;
-  const meta = document.createElement('span');
+  const meta = document.createElement('div');
   meta.className = 'timeline-row__meta';
-  meta.textContent = `${memory.timeText} · ${parsed.resolved ? parsed.normalized : '时间待考'}${memory.bookGroup ? ` · ${memory.bookGroup}` : ''}`;
+  const rawTime = memory.timeText.trim();
+  if (rawTime) {
+    const rawTimeLabel = document.createElement('span');
+    rawTimeLabel.textContent = rawTime;
+    const precisionLabel = document.createElement('span');
+    precisionLabel.className = 'timeline-row__precision';
+    precisionLabel.textContent = timelinePrecisionLabel(parsed.precision);
+    meta.append(rawTimeLabel, precisionLabel);
+  }
   main.append(title, meta);
 
-  const includeLabel = document.createElement('label');
-  includeLabel.className = 'book-check';
-  const include = document.createElement('input');
-  include.type = 'checkbox';
-  include.checked = memory.includedInBook;
-  include.dataset.role = 'timeline-include';
-  includeLabel.append(include, '入书');
-
+  const bookmark = document.createElement('button');
+  bookmark.type = 'button';
+  bookmark.className = memory.includedInBook
+    ? 'timeline-bookmark is-active'
+    : 'timeline-bookmark';
+  bookmark.dataset.action = 'timeline-toggle-include';
+  bookmark.setAttribute('aria-pressed', String(memory.includedInBook));
+  bookmark.title = memory.includedInBook ? '已加入书稿，点击移出' : '加入书稿';
+  bookmark.setAttribute('aria-label', bookmark.title);
+  bookmark.innerHTML = `
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+      <path d="M6 3.75h12v17l-6-4-6 4v-17Z" fill="${memory.includedInBook ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+    </svg>
+  `;
   const actions = document.createElement('div');
   actions.className = 'timeline-row__actions';
   const edit = document.createElement('button');
@@ -519,14 +601,15 @@ function createTimelineRow(memory: MemoryEntry): HTMLElement {
   remove.textContent = '删除';
   actions.append(edit, remove);
 
-  row.append(dragHandle, selectLabel, main, includeLabel, actions);
+  row.append(dragHandle, selectLabel, main, bookmark, actions);
   return row;
 }
 
 function renderTimelineView(): void {
   const memories = getTimelineMemories();
   timelineList.replaceChildren();
-  timelineSelectedCount.textContent = timelineSelection.size > 0 ? `已选择 ${timelineSelection.size} 篇` : '未选择';
+  timelineSelectedCount.textContent = `已选 ${timelineSelection.size} 篇`;
+  timelineBatchActions.hidden = timelineSelection.size === 0;
 
   if (memories.length === 0) {
     const empty = document.createElement('div');
@@ -1080,7 +1163,7 @@ function openPeopleDialog(): void {
 function getCurrentBook(): BookDocument | null {
   const selected = getTimelineMemories().filter((memory) => memory.includedInBook);
   if (selected.length === 0) return null;
-  return buildBook(getTimelineMemories(), library.book, PARSE_OPTIONS, library.people);
+  return buildBook(getTimelineMemories(), library.book, parseOptions, library.people);
 }
 
 let editorDictation: DictationController | null = null;
@@ -1293,6 +1376,10 @@ timelineOrderMode.addEventListener('change', () => {
   renderWorkspace();
 });
 timelineGroupMode.addEventListener('change', renderTimelineView);
+timelineClearSelectionButton.addEventListener('click', () => {
+  timelineSelection.clear();
+  renderTimelineView();
+});
 timelineSelectAllButton.addEventListener('click', () => {
   const ids = getTimelineMemories().map((memory) => memory.id);
   if (timelineSelection.size === ids.length) timelineSelection.clear();
@@ -1326,7 +1413,10 @@ timelineList.addEventListener('click', (event) => {
   const memory = library.memories.find((item) => item.id === id);
   const action = target.closest<HTMLElement>('[data-action]')?.dataset.action;
   if (!memory || !action) return;
-  if (action === 'timeline-edit') {
+  if (action === 'timeline-toggle-include') {
+    updateMemoryById(memory.id, { includedInBook: !memory.includedInBook });
+    renderBookPanel();
+  } else if (action === 'timeline-edit') {
     openEditDialog(memory);
   } else if (action === 'timeline-delete' && window.confirm(`确定删除《${memory.title}》吗？`)) {
     const memories = library.memories.filter((item) => item.id !== memory.id);
@@ -1348,53 +1438,84 @@ timelineList.addEventListener('change', (event) => {
     renderBookPanel();
   }
 });
-timelineList.addEventListener('dragstart', (event) => {
-  if (library.orderMode !== 'manual') return;
-  const target = event.target;
-  if (!(target instanceof Element) || !target.closest('.timeline-drag-handle')) return;
-  const row = target.closest<HTMLElement>('.timeline-row');
-  if (!row?.dataset.id) return;
-  draggedMemoryId = row.dataset.id;
-  row.classList.add('is-dragging');
-  event.dataTransfer?.setData('text/plain', draggedMemoryId);
-  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
-});
-
-timelineList.addEventListener('dragover', (event) => {
-  if (library.orderMode !== 'manual' || !draggedMemoryId) return;
-  event.preventDefault();
-  const target = event.target;
-  if (!(target instanceof Element)) return;
-  const row = target.closest<HTMLElement>('.timeline-row');
-  if (!row || row.dataset.id === draggedMemoryId) return;
+function clearTimelinePointerIndicators(): void {
   timelineList.querySelectorAll('.is-drop-before, .is-drop-after').forEach((element) => {
     element.classList.remove('is-drop-before', 'is-drop-after');
   });
-  const rect = row.getBoundingClientRect();
-  row.classList.add(event.clientY < rect.top + rect.height / 2 ? 'is-drop-before' : 'is-drop-after');
-});
+}
 
-timelineList.addEventListener('drop', (event) => {
-  if (library.orderMode !== 'manual') return;
-  event.preventDefault();
+function finishTimelinePointerDrag(commit: boolean): void {
+  const drag = timelinePointerDrag;
+  if (!drag) return;
+  clearTimelinePointerIndicators();
+  drag.row.classList.remove('is-pointer-dragging');
+  drag.row.style.removeProperty('transform');
+  drag.row.style.removeProperty('z-index');
+  try {
+    drag.row.releasePointerCapture(drag.pointerId);
+  } catch {}
+  timelinePointerDrag = null;
+  document.body.classList.remove('is-reordering-timeline');
+  if (commit && drag.targetId) reorderMemory(drag.sourceId, drag.targetId, drag.placement);
+}
+
+timelineList.addEventListener('pointerdown', (event) => {
+  if (library.orderMode !== 'manual' || event.button !== 0) return;
   const target = event.target;
   if (!(target instanceof Element)) return;
+  const handle = target.closest<HTMLButtonElement>('.timeline-drag-handle');
   const row = target.closest<HTMLElement>('.timeline-row');
-  const targetId = row?.dataset.id;
-  const sourceId = draggedMemoryId ?? event.dataTransfer?.getData('text/plain');
-  if (!row || !targetId || !sourceId) return;
-  const rect = row.getBoundingClientRect();
+  if (!handle || !row?.dataset.id) return;
+  event.preventDefault();
+  handle.setPointerCapture(event.pointerId);
+  timelinePointerDrag = {
+    sourceId: row.dataset.id,
+    pointerId: event.pointerId,
+    startY: event.clientY,
+    row,
+    targetId: null,
+    placement: 'before',
+  };
+  row.classList.add('is-pointer-dragging');
+  document.body.classList.add('is-reordering-timeline');
+});
+
+document.addEventListener('pointermove', (event) => {
+  const drag = timelinePointerDrag;
+  if (!drag || event.pointerId !== drag.pointerId) return;
+  event.preventDefault();
+  const offsetY = event.clientY - drag.startY;
+  drag.row.style.transform = `translateY(${offsetY}px)`;
+  drag.row.style.zIndex = '20';
+
+  const candidate =
+    document
+      .elementsFromPoint(event.clientX, event.clientY)
+      .map((element) => element.closest<HTMLElement>('.timeline-row'))
+      .find((row) => row && row !== drag.row && row.dataset.id) ?? null;
+
+  clearTimelinePointerIndicators();
+  if (!candidate || candidate === drag.row || !candidate.dataset.id) {
+    drag.targetId = null;
+    return;
+  }
+
+  const rect = candidate.getBoundingClientRect();
   const placement = event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
-  reorderMemory(sourceId, targetId, placement);
+  drag.targetId = candidate.dataset.id;
+  drag.placement = placement;
+  candidate.classList.add(placement === 'before' ? 'is-drop-before' : 'is-drop-after');
 });
 
-timelineList.addEventListener('dragend', () => {
-  draggedMemoryId = null;
-  timelineList.querySelectorAll('.is-dragging, .is-drop-before, .is-drop-after').forEach((element) => {
-    element.classList.remove('is-dragging', 'is-drop-before', 'is-drop-after');
-  });
+document.addEventListener('pointerup', (event) => {
+  if (!timelinePointerDrag || event.pointerId !== timelinePointerDrag.pointerId) return;
+  finishTimelinePointerDrag(true);
 });
 
+document.addEventListener('pointercancel', (event) => {
+  if (!timelinePointerDrag || event.pointerId !== timelinePointerDrag.pointerId) return;
+  finishTimelinePointerDrag(false);
+});
 bookSelectionList.addEventListener('change', (event) => {
   const target = event.target;
   if (!(target instanceof HTMLInputElement) || target.dataset.role !== 'book-select') return;
@@ -1664,13 +1785,7 @@ editDialog.addEventListener('close', () => {
   voiceStatus.textContent = '语音输入使用浏览器中文识别，边说边写入正文。';
 });
 
-bookTitleInput.value = library.book.title;
-bookSubtitleInput.value = library.book.subtitle;
-bookAuthorInput.value = library.book.author;
-bookPrefaceInput.value = library.book.preface;
-bookAfterwordInput.value = library.book.afterword;
-chapterModeSelect.value = library.book.chapterMode;
 renderWorkspace();
-void initializeBackup();
 switchView('writing');
+void initializeStorage();
 
